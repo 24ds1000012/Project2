@@ -62,7 +62,6 @@ app.post('/api', upload.single('file'), async (req, res) => {
     res.json({ answer });
 });
 
+
 // Start the server
-app.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}`);
-});
+module.exports = app;
