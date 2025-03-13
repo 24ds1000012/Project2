@@ -62,6 +62,12 @@ app.post('/api', upload.single('file'), async (req, res) => {
     res.json({ answer });
 });
 
+// Start the server only if not in Vercel
+if (require.main === module) {
+    app.listen(port, () => {
+        console.log(`Server running at http://localhost:${port}`);
+    });
+}
 
 // Start the server
 module.exports = app;
