@@ -5,11 +5,10 @@ const path = require('path');
 require('dotenv').config();
 
 const app = express();
-const port = process.env.PORT || 3000;
 
 // Middleware to parse JSON
-app.use(express.json());  // ✅ Fix: Parse JSON body
-app.use(express.urlencoded({ extended: true })); // ✅ Fix: Parse URL-encoded data
+app.use(express.json());  
+app.use(express.urlencoded({ extended: true })); 
 
 // Multer setup for file uploads
 const storage = multer.memoryStorage();
@@ -23,7 +22,7 @@ const getAnswerFromLLM = async (question, fileContent) => {
             messages: [
                 { role: 'system', content: 'You are an assistant that answers assignment questions.' },
                 { role: 'user', content: question },
-                { role: 'user', content: fileContent || '' }, // Send file content if available
+                { role: 'user', content: fileContent || '' }, 
             ],
         }, {
             headers: {
@@ -41,7 +40,7 @@ const getAnswerFromLLM = async (question, fileContent) => {
 
 // API endpoint
 app.post('/api', upload.single('file'), async (req, res) => {
-    console.log("Received request:", req.body); // Debugging log
+    console.log("Received request:", req.body);
     const { question } = req.body;
     const file = req.file;
 
@@ -62,16 +61,10 @@ app.post('/api', upload.single('file'), async (req, res) => {
     res.json({ answer });
 });
 
-// Start the server only if not in Vercel
-if (require.main === module) {
-    app.listen(port, () => {
-        console.log(`Server running at http://localhost:${port}`);
-    });
-}
-
+// Root route for debugging
 app.get("/", (req, res) => {
     res.send("Welcome to the Assignment Answer API! Use the /api endpoint.");
 });
 
-// Start the server
+// ✅ Remove `app.listen()` for Vercel and instead export the app
 module.exports = app;
