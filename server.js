@@ -69,5 +69,9 @@ if (require.main === module) {
     });
 }
 
+app.get("/", (req, res) => {
+    res.send("Welcome to the Assignment Answer API! Use the /api endpoint.");
+});
+
 // Start the server
 module.exports = app;
