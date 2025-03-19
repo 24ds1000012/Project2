@@ -1,4 +1,4 @@
-cconst express = require('express');
+const express = require('express');
 const multer = require('multer');
 const axios = require('axios');
 const path = require('path');
@@ -58,4 +58,23 @@ app.post('/api', upload.single('file'), async (req, res) => {
             }
         }
 
-        const answer = await getAnswerFromLLM(que
+        const answer = await getAnswerFromLLM(question, fileContent);
+        res.json({ answer });
+    } catch (error) {
+        console.error('Error handling the POST request:', error);
+        res.status(500).json({ error: 'An unexpected error occurred while processing the request.' });
+    }
+});
+
+// Root route for debugging
+app.get("/", (req, res) => {
+    res.send("Welcome to the Assignment Answer API! Use the /api endpoint.");
+});
+
+// **Temporary Test Route for Debugging**
+app.get('/test', (req, res) => {
+    res.send("Test endpoint is working!");
+});
+
+// ✅ Remove `app.listen()` for Vercel and instead export the app
+module.exports = app;
