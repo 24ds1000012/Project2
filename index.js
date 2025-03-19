@@ -38,33 +38,11 @@ const getAnswerFromLLM = async (question, fileContent) => {
     }
 };
 
-// API endpoint
+// API endpoint for POST requests
 app.post('/api', upload.single('file'), async (req, res) => {
     console.log("Received request:", req.body);
     const { question } = req.body;
     const file = req.file;
 
     if (!question) {
-        return res.status(400).json({ error: 'Question is required.' });
-    }
-
-    let fileContent = '';
-    if (file) {
-        if (path.extname(file.originalname) === '.txt') {
-            fileContent = file.buffer.toString();
-        } else {
-            return res.status(400).json({ error: 'Only .txt files are supported for now.' });
-        }
-    }
-
-    const answer = await getAnswerFromLLM(question, fileContent);
-    res.json({ answer });
-});
-
-// Root route for debugging
-app.get("/", (req, res) => {
-    res.send("Welcome to the Assignment Answer API! Use the /api endpoint.");
-});
-
-// ✅ Remove `app.listen()` for Vercel and instead export the app
-module.exports = app;
+        return res.stat
