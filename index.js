@@ -1,4 +1,4 @@
-const express = require('express');
+cconst express = require('express');
 const multer = require('multer');
 const axios = require('axios');
 const path = require('path');
@@ -34,15 +34,28 @@ const getAnswerFromLLM = async (question, fileContent) => {
         return response.data.choices[0].message.content.trim();
     } catch (error) {
         console.error('Error calling LLM API:', error);
-        return 'Sorry, I could not generate an answer at the moment.';
+        return `Error: ${error.message}`;
     }
 };
 
 // API endpoint for POST requests
 app.post('/api', upload.single('file'), async (req, res) => {
-    console.log("Received request:", req.body);
-    const { question } = req.body;
-    const file = req.file;
+    try {
+        console.log("Received request:", req.body);
+        const { question } = req.body;
+        const file = req.file;
 
-    if (!question) {
-        return res.stat
+        if (!question) {
+            return res.status(400).json({ error: 'Question is required.' });
+        }
+
+        let fileContent = '';
+        if (file) {
+            if (path.extname(file.originalname) === '.txt') {
+                fileContent = file.buffer.toString();
+            } else {
+                return res.status(400).json({ error: 'Only .txt files are supported for now.' });
+            }
+        }
+
+        const answer = await getAnswerFromLLM(que
