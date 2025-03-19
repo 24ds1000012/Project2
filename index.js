@@ -6,15 +6,12 @@ require('dotenv').config();
 
 const app = express();
 
-// Middleware to parse JSON
-app.use(express.json());  
-app.use(express.urlencoded({ extended: true })); 
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// Multer setup for file uploads
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
-// Function to call OpenAI API
 const getAnswerFromLLM = async (question, fileContent) => {
     try {
         const response = await axios.post('https://api.openai.com/v1/chat/completions', {
@@ -22,7 +19,7 @@ const getAnswerFromLLM = async (question, fileContent) => {
             messages: [
                 { role: 'system', content: 'You are an assistant that answers assignment questions.' },
                 { role: 'user', content: question },
-                { role: 'user', content: fileContent || '' }, 
+                { role: 'user', content: fileContent || '' },
             ],
         }, {
             headers: {
@@ -61,11 +58,10 @@ app.post('/api', upload.single('file'), async (req, res) => {
     res.json({ answer });
 });
 
-// Root route for debugging
+// Welcome Route
 app.get("/", (req, res) => {
     res.send("Welcome to the Assignment Answer API! Use the /api endpoint.");
 });
 
-// ✅ Remove `app.listen()` for Vercel and instead export the app
+// ✅ Ensure we export app for Vercel
 module.exports = app;
-
