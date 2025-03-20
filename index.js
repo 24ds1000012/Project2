@@ -17,7 +17,7 @@ app.use(express.urlencoded({ extended: true }));
 const configuration = new Configuration({
     apiKey: process.env.OPENAI_API_KEY,
 });
-const openai = new OpenAiaApi(configuration);
+const openai = new OpenAIApi(configuration);  // Corrected capitalization here
 
 // Helper function to process ZIP and extract answers from various file types
 const extractAndFindAnswer = async (zipBuffer, question) => {
