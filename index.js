@@ -1,80 +1,90 @@
-const express = require('express');
-const multer = require('multer');
-const axios = require('axios');
-const path = require('path');
-require('dotenv').config();
+const express = require("express");
+const multer = require("multer");
+const AdmZip = require("adm-zip");
+const path = require("path");
+const fs = require("fs");
+const csvParser = require("csv-parser");
+
+require("dotenv").config();
 
 const app = express();
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// Middleware to parse JSON
-app.use(express.json());  
-app.use(express.urlencoded({ extended: true })); 
-
-// Multer setup for file uploads
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
-// Function to call OpenAI API
-const getAnswerFromLLM = async (question, fileContent) => {
+// Function to extract CSV from ZIP and find "answer" column
+const extractAndFindAnswer = async (zipBuffer) => {
     try {
-        const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-            model: 'gpt-3.5-turbo',
-            messages: [
-                { role: 'system', content: 'You are an assistant that answers assignment questions.' },
-                { role: 'user', content: question },
-                { role: 'user', content: fileContent || '' }, 
-            ],
-        }, {
-            headers: {
-                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-                'Content-Type': 'application/json'
-            },
+        const zip = new AdmZip(zipBuffer);
+        const zipEntries = zip.getEntries();
+
+        // Find extract.csv inside the ZIP
+        let csvFile;
+        zipEntries.forEach(entry => {
+            if (entry.entryName.toLowerCase().endsWith("extract.csv")) {
+                csvFile = entry.getData().toString("utf8");
+            }
         });
 
-        return response.data.choices[0].message.content.trim();
+        if (!csvFile) {
+            throw new Error("extract.csv not found in ZIP.");
+        }
+
+        // Parse CSV and find "answer" column
+        return new Promise((resolve, reject) => {
+            const results = [];
+            const readableStream = require("stream").Readable.from(csvFile);
+            readableStream
+                .pipe(csvParser())
+                .on("data", (row) => {
+                    if (row.answer) {
+                        results.push(row.answer);
+                    }
+                })
+                .on("end", () => resolve(results))
+                .on("error", (err) => reject(err));
+        });
+
     } catch (error) {
-        console.error('Error calling LLM API:', error);
-        return `Error: ${error.message}`;
+        console.error("ZIP extraction error:", error);
+        return `Error processing ZIP: ${error.message}`;
     }
 };
 
-// API endpoint for POST requests
-app.post('/api', upload.single('file'), async (req, res) => {
+// API endpoint to process ZIP files
+app.post("/api", upload.single("file"), async (req, res) => {
     try {
         console.log("Received request:", req.body);
         const { question } = req.body;
         const file = req.file;
 
         if (!question) {
-            return res.status(400).json({ error: 'Question is required.' });
+            return res.status(400).json({ error: "Question is required." });
         }
 
-        let fileContent = '';
+        let answerValues = [];
+
         if (file) {
-            if (path.extname(file.originalname) === '.txt') {
-                fileContent = file.buffer.toString();
+            if (path.extname(file.originalname) === ".zip") {
+                answerValues = await extractAndFindAnswer(file.buffer);
             } else {
-                return res.status(400).json({ error: 'Only .txt files are supported for now.' });
+                return res.status(400).json({ error: "Only .zip files are supported for this operation." });
             }
         }
 
-        const answer = await getAnswerFromLLM(question, fileContent);
-        res.json({ answer });
+        res.json({ question, answers: answerValues });
     } catch (error) {
-        console.error('Error handling the POST request:', error);
-        res.status(500).json({ error: 'An unexpected error occurred while processing the request.' });
+        console.error("Error processing request:", error);
+        res.status(500).json({ error: "An unexpected error occurred." });
     }
 });
 
-// Root route for debugging
+// Root route
 app.get("/", (req, res) => {
     res.send("Welcome to the Assignment Answer API! Use the /api endpoint.");
 });
 
-// **Temporary Test Route for Debugging**
-app.get('/test', (req, res) => {
-    res.send("Test endpoint is working!");
-});
-
-// ✅ Remove `app.listen()` for Vercel and instead export the app
+// Export for Vercel
 module.exports = app;
