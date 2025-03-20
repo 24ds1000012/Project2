@@ -22,6 +22,12 @@ const extractAndFindAnswer = async (zipBuffer) => {
         // Find extract.csv inside the ZIP
         let csvFile;
         zipEntries.forEach(entry => {
+            // Skip any unwanted macOS metadata files
+            if (entry.entryName.startsWith('__MACOSX/')) {
+                console.log("Skipping macOS metadata file:", entry.entryName);
+                return;
+            }
+
             console.log(`Checking ZIP entry: ${entry.entryName}`);
             if (entry.entryName.toLowerCase().endsWith("extract.csv")) {
                 console.log("Found extract.csv in ZIP");
@@ -61,6 +67,12 @@ const extractAndFindAnswer = async (zipBuffer) => {
                     reject(err);
                 });
         });
+
+    } catch (error) {
+        console.error("ZIP extraction error:", error);
+        return `Error processing ZIP: ${error.message}`;
+    }
+};
 
     } catch (error) {
         console.error("ZIP extraction error:", error);
