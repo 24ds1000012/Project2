@@ -5,6 +5,7 @@ const path = require("path");
 const { Configuration, OpenAIApi } = require("openai");
 const textract = require("textract");
 const csvParser = require("csv-parser"); // Add the CSV parser library
+const streamifier = require("streamifier"); // Add the streamifier library
 
 require("dotenv").config();
 
@@ -16,7 +17,7 @@ app.use(express.urlencoded({ extended: true }));
 const configuration = new Configuration({
     apiKey: process.env.OPENAI_API_KEY,
 });
-const openai = new OpenAIApi(configuration);
+const openai = new OpenAiaApi(configuration);
 
 // Helper function to process ZIP and extract answers from various file types
 const extractAndFindAnswer = async (zipBuffer, question) => {
@@ -70,7 +71,11 @@ const extractAndFindAnswer = async (zipBuffer, question) => {
 const extractTextFromCSV = (fileContent) => {
     return new Promise((resolve, reject) => {
         let extractedText = '';
-        fileContent
+        
+        // Convert the Buffer to a readable stream
+        const stream = streamifier.createReadStream(fileContent);
+        
+        stream
             .pipe(csvParser())
             .on('data', (row) => {
                 extractedText += JSON.stringify(row) + '\n'; // Add CSV row as text
