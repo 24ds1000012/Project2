@@ -3,7 +3,8 @@ const multer = require("multer");
 const AdmZip = require("adm-zip");
 const path = require("path");
 const { Configuration, OpenAIApi } = require("openai");
-const textract = require("textract"); // A library to extract text from various file types
+const textract = require("textract");
+const csvParser = require("csv-parser"); // Add the CSV parser library
 
 require("dotenv").config();
 
@@ -37,13 +38,15 @@ const extractAndFindAnswer = async (zipBuffer, question) => {
             const fileExt = path.extname(entry.entryName).toLowerCase();
 
             if (fileExt === '.txt') {
-                extractedText += fileContent.toString("utf8"); // Directly add text from .txt files
+                extractedText += fileContent.toString("utf8");
             } else if (fileExt === '.json') {
-                extractedText += fileContent.toString("utf8"); // Add text from .json files
+                extractedText += fileContent.toString("utf8");
+            } else if (fileExt === '.csv') {
+                extractedText += await extractTextFromCSV(fileContent); // Handle CSV files
             } else if (fileExt === '.pdf') {
-                extractedText += await extractTextFromPDF(fileContent); // Await PDF extraction
+                extractedText += await extractTextFromPDF(fileContent);
             } else if (fileExt === '.docx' || fileExt === '.doc') {
-                extractedText += await extractTextFromDoc(fileContent); // Await DOCX extraction
+                extractedText += await extractTextFromDoc(fileContent);
             } else {
                 console.log(`Unsupported file type: ${fileExt}`);
             }
@@ -53,7 +56,7 @@ const extractAndFindAnswer = async (zipBuffer, question) => {
             throw new Error("No readable text found in the ZIP file.");
         }
 
-        // Now, try to search for content related to the question in the extracted text
+        // Now, search for the answer in the extracted text
         const answer = searchForAnswerInText(extractedText, question);
         return answer;
 
@@ -61,6 +64,24 @@ const extractAndFindAnswer = async (zipBuffer, question) => {
         console.error("Error processing ZIP:", error);
         return `Error processing ZIP: ${error.message}`;
     }
+};
+
+// Helper function to extract text from CSV files
+const extractTextFromCSV = (fileContent) => {
+    return new Promise((resolve, reject) => {
+        let extractedText = '';
+        fileContent
+            .pipe(csvParser())
+            .on('data', (row) => {
+                extractedText += JSON.stringify(row) + '\n'; // Add CSV row as text
+            })
+            .on('end', () => {
+                resolve(extractedText); // Resolve the extracted text after parsing
+            })
+            .on('error', (err) => {
+                reject("Error parsing CSV: " + err); // Reject if CSV parsing fails
+            });
+    });
 };
 
 // Helper function to extract text from PDF files
@@ -91,12 +112,11 @@ const extractTextFromDoc = (fileContent) => {
 
 // Helper function to search for an answer in extracted text
 const searchForAnswerInText = (text, question) => {
-    // Perform a simple search in the extracted text for the question (case-insensitive)
     const regex = new RegExp(question, 'i');
     const matches = text.match(regex);
 
     if (matches && matches.length > 0) {
-        return matches; // Return the matched portion of the text as answers
+        return matches;
     } else {
         return ["No answer found in the document."];
     }
@@ -105,22 +125,19 @@ const searchForAnswerInText = (text, question) => {
 // Function to interact with OpenAI API (for non-ZIP questions)
 const getChatGPTAnswer = async (question) => {
     try {
-        // For chat models, use the chat completion endpoint
         const response = await openai.createChatCompletion({
-            model: "gpt-3.5-turbo", // Chat model
+            model: "gpt-3.5-turbo", 
             messages: [{ role: "user", content: question }],
             max_tokens: 150,
             temperature: 0.7,
         });
 
-        // Return the response text from the model
         return response.data.choices[0].message.content.trim();
     } catch (error) {
         console.error("Error with OpenAI API:", error.response ? error.response.data : error.message);
         return "Sorry, I couldn't get an answer from the AI.";
     }
 };
-
 
 // API endpoint to handle both JSON and multipart requests
 app.post("/api", multer().single("file"), async (req, res) => {
@@ -158,4 +175,3 @@ app.get("/", (req, res) => {
 
 // Export for Vercel
 module.exports = app;
-
