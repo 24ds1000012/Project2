@@ -39,7 +39,9 @@ const extractAndFindAnswer = async (zipBuffer) => {
             throw new Error("extract.csv not found in ZIP.");
         }
 
-        console.log("CSV File Extracted Successfully");
+        // Remove BOM if present (common in CSV files)
+        csvFile = csvFile.replace(/^\uFEFF/, '');
+        console.log("CSV File Extracted and BOM Removed");
 
         // Parse CSV and find "answer" column
         return new Promise((resolve, reject) => {
