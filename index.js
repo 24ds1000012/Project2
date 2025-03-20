@@ -106,14 +106,15 @@ const searchForAnswerInText = (text, question) => {
 const getChatGPTAnswer = async (question) => {
     try {
         const response = await openai.createCompletion({
-            model: "gpt-3.5-turbo", // You can change this to another model if necessary
+            model: "gpt-3.5-turbo", 
             prompt: question,
             max_tokens: 150,
+            temperature: 0.7,
         });
 
         return response.data.choices[0].text.trim();
     } catch (error) {
-        console.error("Error with OpenAI API:", error);
+        console.error("Error with OpenAI API:", error.response ? error.response.data : error.message);
         return "Sorry, I couldn't get an answer from the AI.";
     }
 };
