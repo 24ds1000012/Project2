@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "main/index.js",
   "scripts": {
-    "start": "main api/index.js"
+    "start": "node main/index.js"
   },
   "dependencies": {
     "axios": "^1.8.2",
@@ -16,4 +16,3 @@
     "textract": "^5.4.0"
   }
 }
-
