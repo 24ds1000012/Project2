@@ -105,19 +105,22 @@ const searchForAnswerInText = (text, question) => {
 // Function to interact with OpenAI API (for non-ZIP questions)
 const getChatGPTAnswer = async (question) => {
     try {
-        const response = await openai.createCompletion({
-            model: "gpt-3.5-turbo", 
-            prompt: question,
+        // For chat models, use the chat completion endpoint
+        const response = await openai.createChatCompletion({
+            model: "gpt-3.5-turbo", // Chat model
+            messages: [{ role: "user", content: question }],
             max_tokens: 150,
             temperature: 0.7,
         });
 
-        return response.data.choices[0].text.trim();
+        // Return the response text from the model
+        return response.data.choices[0].message.content.trim();
     } catch (error) {
         console.error("Error with OpenAI API:", error.response ? error.response.data : error.message);
         return "Sorry, I couldn't get an answer from the AI.";
     }
 };
+
 
 // API endpoint to handle both JSON and multipart requests
 app.post("/api", multer().single("file"), async (req, res) => {
