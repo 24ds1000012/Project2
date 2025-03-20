@@ -2,7 +2,6 @@ const express = require("express");
 const multer = require("multer");
 const AdmZip = require("adm-zip");
 const path = require("path");
-const fs = require("fs");
 const { Configuration, OpenAIApi } = require("openai");
 const textract = require("textract"); // A library to extract text from various file types
 
@@ -26,9 +25,9 @@ const extractAndFindAnswer = async (zipBuffer, question) => {
         let extractedText = '';
 
         // Loop through each entry in the ZIP file and handle different file types
-        zipEntries.forEach(entry => {
+        for (let entry of zipEntries) {
             if (entry.entryName.startsWith('__MACOSX/')) {
-                return; // Skip macOS metadata files
+                continue; // Skip macOS metadata files
             }
 
             console.log(`Extracting file: ${entry.entryName}`);
@@ -42,28 +41,13 @@ const extractAndFindAnswer = async (zipBuffer, question) => {
             } else if (fileExt === '.json') {
                 extractedText += fileContent.toString("utf8"); // Add text from .json files
             } else if (fileExt === '.pdf') {
-                // Handle PDF extraction (this example uses a simple library)
-                await textract.fromBufferWithMime("application/pdf", fileContent, function( err, text ) {
-                    if (err) {
-                        console.error("Error extracting text from PDF:", err);
-                    } else {
-                        extractedText += text;
-                    }
-                });
+                extractedText += await extractTextFromPDF(fileContent); // Await PDF extraction
             } else if (fileExt === '.docx' || fileExt === '.doc') {
-                // Handle DOCX extraction
-                await textract.fromBufferWithMime("application/vnd.openxmlformats-officedocument.wordprocessingml.document", fileContent, function( err, text ) {
-                    if (err) {
-                        console.error("Error extracting text from DOCX:", err);
-                    } else {
-                        extractedText += text;
-                    }
-                });
+                extractedText += await extractTextFromDoc(fileContent); // Await DOCX extraction
             } else {
-                // Add support for more file types as needed
                 console.log(`Unsupported file type: ${fileExt}`);
             }
-        });
+        }
 
         if (!extractedText) {
             throw new Error("No readable text found in the ZIP file.");
@@ -77,6 +61,32 @@ const extractAndFindAnswer = async (zipBuffer, question) => {
         console.error("Error processing ZIP:", error);
         return `Error processing ZIP: ${error.message}`;
     }
+};
+
+// Helper function to extract text from PDF files
+const extractTextFromPDF = (fileContent) => {
+    return new Promise((resolve, reject) => {
+        textract.fromBufferWithMime("application/pdf", fileContent, function (err, text) {
+            if (err) {
+                reject("Error extracting text from PDF: " + err);
+            } else {
+                resolve(text);
+            }
+        });
+    });
+};
+
+// Helper function to extract text from DOCX files
+const extractTextFromDoc = (fileContent) => {
+    return new Promise((resolve, reject) => {
+        textract.fromBufferWithMime("application/vnd.openxmlformats-officedocument.wordprocessingml.document", fileContent, function (err, text) {
+            if (err) {
+                reject("Error extracting text from DOCX: " + err);
+            } else {
+                resolve(text);
+            }
+        });
+    });
 };
 
 // Helper function to search for an answer in extracted text
@@ -144,3 +154,4 @@ app.get("/", (req, res) => {
 
 // Export for Vercel
 module.exports = app;
+
