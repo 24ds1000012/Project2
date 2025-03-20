@@ -16,13 +16,13 @@ const upload = multer({ storage: storage });
 
 const extractAndFindAnswer = async (zipBuffer) => {
     try {
+        console.log("Starting ZIP extraction...");
         const zip = new AdmZip(zipBuffer);
         const zipEntries = zip.getEntries();
 
         // Find extract.csv inside the ZIP
         let csvFile;
         zipEntries.forEach(entry => {
-            // Skip any unwanted macOS metadata files
             if (entry.entryName.startsWith('__MACOSX/')) {
                 console.log("Skipping macOS metadata file:", entry.entryName);
                 return;
@@ -39,12 +39,13 @@ const extractAndFindAnswer = async (zipBuffer) => {
             throw new Error("extract.csv not found in ZIP.");
         }
 
+        console.log("CSV File Extracted Successfully");
+
         // Parse CSV and find "answer" column
         return new Promise((resolve, reject) => {
             const results = [];
             const readableStream = require("stream").Readable.from(csvFile);
 
-            // CSV parsing with error logging
             readableStream
                 .pipe(csvParser())
                 .on("data", (row) => {
@@ -57,6 +58,7 @@ const extractAndFindAnswer = async (zipBuffer) => {
                     }
                 })
                 .on("end", () => {
+                    console.log("CSV parsing completed");
                     if (results.length === 0) {
                         console.log("No answers found in CSV");
                     }
@@ -74,11 +76,9 @@ const extractAndFindAnswer = async (zipBuffer) => {
     }
 };
 
-    } catch (error) {
-        console.error("ZIP extraction error:", error);
-        return `Error processing ZIP: ${error.message}`;
-    }
-};
+
+
+
 // API endpoint to process ZIP files
 app.post("/api", upload.single("file"), async (req, res) => {
     try {
