@@ -106,7 +106,7 @@ const searchForAnswerInText = (text, question) => {
 const getChatGPTAnswer = async (question) => {
     try {
         const response = await openai.createCompletion({
-            model: "text-davinci-003", // You can change this to another model if necessary
+            model: "gpt-3.5-turbo", // You can change this to another model if necessary
             prompt: question,
             max_tokens: 150,
         });
