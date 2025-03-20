@@ -14,7 +14,6 @@ app.use(express.urlencoded({ extended: true }));
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
-// Function to extract CSV from ZIP and find "answer" column
 const extractAndFindAnswer = async (zipBuffer) => {
     try {
         const zip = new AdmZip(zipBuffer);
@@ -23,7 +22,9 @@ const extractAndFindAnswer = async (zipBuffer) => {
         // Find extract.csv inside the ZIP
         let csvFile;
         zipEntries.forEach(entry => {
+            console.log(`Checking ZIP entry: ${entry.entryName}`);
             if (entry.entryName.toLowerCase().endsWith("extract.csv")) {
+                console.log("Found extract.csv in ZIP");
                 csvFile = entry.getData().toString("utf8");
             }
         });
@@ -36,15 +37,29 @@ const extractAndFindAnswer = async (zipBuffer) => {
         return new Promise((resolve, reject) => {
             const results = [];
             const readableStream = require("stream").Readable.from(csvFile);
+
+            // CSV parsing with error logging
             readableStream
                 .pipe(csvParser())
                 .on("data", (row) => {
+                    console.log("Row data:", row);  // Log each row for debugging
                     if (row.answer) {
+                        console.log("Found answer:", row.answer);  // Log if 'answer' is found
                         results.push(row.answer);
+                    } else {
+                        console.log("No 'answer' column in this row", row);  // Log if 'answer' column is missing
                     }
                 })
-                .on("end", () => resolve(results))
-                .on("error", (err) => reject(err));
+                .on("end", () => {
+                    if (results.length === 0) {
+                        console.log("No answers found in CSV");
+                    }
+                    resolve(results);
+                })
+                .on("error", (err) => {
+                    console.error("Error parsing CSV:", err);
+                    reject(err);
+                });
         });
 
     } catch (error) {
@@ -52,7 +67,6 @@ const extractAndFindAnswer = async (zipBuffer) => {
         return `Error processing ZIP: ${error.message}`;
     }
 };
-
 // API endpoint to process ZIP files
 app.post("/api", upload.single("file"), async (req, res) => {
     try {
