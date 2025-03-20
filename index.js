@@ -3,7 +3,8 @@ const multer = require("multer");
 const AdmZip = require("adm-zip");
 const path = require("path");
 const fs = require("fs");
-const csvParser = require("csv-parser");
+const { Configuration, OpenAIApi } = require("openai");
+const textract = require("textract"); // A library to extract text from various file types
 
 require("dotenv").config();
 
@@ -11,98 +12,125 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
+// Initialize OpenAI API client
+const configuration = new Configuration({
+    apiKey: process.env.OPENAI_API_KEY,
+});
+const openai = new OpenAIApi(configuration);
 
-const extractAndFindAnswer = async (zipBuffer) => {
+// Helper function to process ZIP and extract answers from various file types
+const extractAndFindAnswer = async (zipBuffer, question) => {
     try {
-        console.log("Starting ZIP extraction...");
         const zip = new AdmZip(zipBuffer);
         const zipEntries = zip.getEntries();
+        let extractedText = '';
 
-        // Find extract.csv inside the ZIP
-        let csvFile;
+        // Loop through each entry in the ZIP file and handle different file types
         zipEntries.forEach(entry => {
             if (entry.entryName.startsWith('__MACOSX/')) {
-                console.log("Skipping macOS metadata file:", entry.entryName);
-                return;
+                return; // Skip macOS metadata files
             }
 
-            console.log(`Checking ZIP entry: ${entry.entryName}`);
-            if (entry.entryName.toLowerCase().endsWith("extract.csv")) {
-                console.log("Found extract.csv in ZIP");
-                csvFile = entry.getData().toString("utf8");
+            console.log(`Extracting file: ${entry.entryName}`);
+            const fileContent = entry.getData();
+
+            // Handle different file types based on extension
+            const fileExt = path.extname(entry.entryName).toLowerCase();
+
+            if (fileExt === '.txt') {
+                extractedText += fileContent.toString("utf8"); // Directly add text from .txt files
+            } else if (fileExt === '.json') {
+                extractedText += fileContent.toString("utf8"); // Add text from .json files
+            } else if (fileExt === '.pdf') {
+                // Handle PDF extraction (this example uses a simple library)
+                await textract.fromBufferWithMime("application/pdf", fileContent, function( err, text ) {
+                    if (err) {
+                        console.error("Error extracting text from PDF:", err);
+                    } else {
+                        extractedText += text;
+                    }
+                });
+            } else if (fileExt === '.docx' || fileExt === '.doc') {
+                // Handle DOCX extraction
+                await textract.fromBufferWithMime("application/vnd.openxmlformats-officedocument.wordprocessingml.document", fileContent, function( err, text ) {
+                    if (err) {
+                        console.error("Error extracting text from DOCX:", err);
+                    } else {
+                        extractedText += text;
+                    }
+                });
+            } else {
+                // Add support for more file types as needed
+                console.log(`Unsupported file type: ${fileExt}`);
             }
         });
 
-        if (!csvFile) {
-            throw new Error("extract.csv not found in ZIP.");
+        if (!extractedText) {
+            throw new Error("No readable text found in the ZIP file.");
         }
 
-        // Remove BOM if present (common in CSV files)
-        csvFile = csvFile.replace(/^\uFEFF/, '');
-        console.log("CSV File Extracted and BOM Removed");
-
-        // Parse CSV and find "answer" column
-        return new Promise((resolve, reject) => {
-            const results = [];
-            const readableStream = require("stream").Readable.from(csvFile);
-
-            readableStream
-                .pipe(csvParser())
-                .on("data", (row) => {
-                    console.log("Row data:", row);  // Log each row for debugging
-                    if (row.answer) {
-                        console.log("Found answer:", row.answer);  // Log if 'answer' is found
-                        results.push(row.answer);
-                    } else {
-                        console.log("No 'answer' column in this row", row);  // Log if 'answer' column is missing
-                    }
-                })
-                .on("end", () => {
-                    console.log("CSV parsing completed");
-                    if (results.length === 0) {
-                        console.log("No answers found in CSV");
-                    }
-                    resolve(results);
-                })
-                .on("error", (err) => {
-                    console.error("Error parsing CSV:", err);
-                    reject(err);
-                });
-        });
+        // Now, try to search for content related to the question in the extracted text
+        const answer = searchForAnswerInText(extractedText, question);
+        return answer;
 
     } catch (error) {
-        console.error("ZIP extraction error:", error);
+        console.error("Error processing ZIP:", error);
         return `Error processing ZIP: ${error.message}`;
     }
 };
 
+// Helper function to search for an answer in extracted text
+const searchForAnswerInText = (text, question) => {
+    // Perform a simple search in the extracted text for the question (case-insensitive)
+    const regex = new RegExp(question, 'i');
+    const matches = text.match(regex);
 
+    if (matches && matches.length > 0) {
+        return matches; // Return the matched portion of the text as answers
+    } else {
+        return ["No answer found in the document."];
+    }
+};
 
-
-// API endpoint to process ZIP files
-app.post("/api", upload.single("file"), async (req, res) => {
+// Function to interact with OpenAI API (for non-ZIP questions)
+const getChatGPTAnswer = async (question) => {
     try {
-        console.log("Received request:", req.body);
+        const response = await openai.createCompletion({
+            model: "text-davinci-003", // You can change this to another model if necessary
+            prompt: question,
+            max_tokens: 150,
+        });
+
+        return response.data.choices[0].text.trim();
+    } catch (error) {
+        console.error("Error with OpenAI API:", error);
+        return "Sorry, I couldn't get an answer from the AI.";
+    }
+};
+
+// API endpoint to handle both JSON and multipart requests
+app.post("/api", multer().single("file"), async (req, res) => {
+    try {
         const { question } = req.body;
         const file = req.file;
 
-        if (!question) {
-            return res.status(400).json({ error: "Question is required." });
+        // Handle the question if it's in JSON (send to ChatGPT)
+        if (req.is("application/json") && question) {
+            const chatGPTAnswer = await getChatGPTAnswer(question);
+            return res.json({
+                question,
+                answers: [chatGPTAnswer],
+            });
         }
 
-        let answerValues = [];
-
-        if (file) {
-            if (path.extname(file.originalname) === ".zip") {
-                answerValues = await extractAndFindAnswer(file.buffer);
-            } else {
-                return res.status(400).json({ error: "Only .zip files are supported for this operation." });
-            }
+        // Handle the file upload request (multipart/form-data) - process ZIP with any file type
+        if (file && path.extname(file.originalname) === ".zip") {
+            const answerValues = await extractAndFindAnswer(file.buffer, question);
+            return res.json({ question, answers: answerValues });
         }
 
-        res.json({ question, answers: answerValues });
+        return res.status(400).json({ error: "Only .zip files are supported for this operation." });
+
     } catch (error) {
         console.error("Error processing request:", error);
         res.status(500).json({ error: "An unexpected error occurred." });
