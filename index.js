@@ -70,7 +70,7 @@ const extractAndFindAnswer = async (zipBuffer, question) => {
 // Helper function to extract text from CSV files
 const extractTextFromCSV = (fileContent) => {
     return new Promise((resolve, reject) => {
-        let extractedText = '';
+        let extractedRows = [];
 
         // Convert Buffer to Readable Stream
         const stream = streamifier.createReadStream(fileContent);
@@ -78,18 +78,26 @@ const extractTextFromCSV = (fileContent) => {
         stream
             .pipe(csvParser())
             .on('data', (row) => {
-                console.log("CSV Row:", row);  // 🚀 Debugging step: Log each CSV row
-                extractedText += JSON.stringify(row) + '\n'; 
+                // Remove BOM from first key
+                const normalizedRow = {};
+                for (const key in row) {
+                    const cleanKey = key.replace(/\uFEFF/g, ""); // Remove BOM
+                    normalizedRow[cleanKey] = row[key];
+                }
+
+                console.log("✅ Normalized CSV Row:", normalizedRow);
+                extractedRows.push(normalizedRow);
             })
             .on('end', () => {
-                console.log("Extracted CSV Text:", extractedText);  // 🚀 Log full extracted text
-                resolve(extractedText);
+                console.log("✅ Extracted CSV Data:", extractedRows);
+                resolve(JSON.stringify(extractedRows)); // Convert to JSON string
             })
             .on('error', (err) => {
                 reject("Error parsing CSV: " + err);
             });
     });
 };
+
 
 
 // Helper function to extract text from PDF files
@@ -121,21 +129,19 @@ const extractTextFromDoc = (fileContent) => {
 // Helper function to search for an answer in extracted text
 const searchForAnswerInText = (text, question) => {
     try {
-        const rows = text.split("\n").map(row => JSON.parse(row)); // Convert text back to JSON
-        console.log("Parsed CSV Rows:", rows); // 🚀 Debugging: Log parsed CSV rows
+        const rows = JSON.parse(text); // Convert JSON string back to array
+        console.log("✅ Parsed CSV Rows:", rows);
 
         for (const row of rows) {
-            for (const key in row) {
-                if (key.toLowerCase().includes("question") && row[key].toLowerCase().includes(question.toLowerCase())) {
-                    console.log("Found Answer:", row["answer"]); // 🚀 Log found answer
-                    return [row["answer"] || "Answer not found in the document."];
-                }
+            if ("answer" in row) {
+                console.log("🎯 Found Answer:", row["answer"]);
+                return [row["answer"]];
             }
         }
         return ["No answer found in the document."];
 
     } catch (error) {
-        console.error("Error searching in extracted text:", error);
+        console.error("❌ Error searching in extracted text:", error);
         return ["Error processing extracted text."];
     }
 };
