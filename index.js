@@ -101,16 +101,17 @@ const extractTextFromCSV = (fileContent) => {
 
 
 // Helper function to extract text from PDF files
-const extractTextFromPDF = (fileContent) => {
-    return new Promise((resolve, reject) => {
-        textract.fromBufferWithMime("application/pdf", fileContent, function (err, text) {
-            if (err) {
-                reject("Error extracting text from PDF: " + err);
-            } else {
-                resolve(text);
-            }
-        });
-    });
+
+const pdfParse = require("pdf-parse");
+
+const extractTextFromPDF = async (fileContent) => {
+    try {
+        const data = await pdfParse(fileContent);
+        return data.text;
+    } catch (error) {
+        console.error("Error extracting text from PDF:", error);
+        return "";
+    }
 };
 
 // Helper function to extract text from DOCX files
