@@ -71,23 +71,26 @@ const extractAndFindAnswer = async (zipBuffer, question) => {
 const extractTextFromCSV = (fileContent) => {
     return new Promise((resolve, reject) => {
         let extractedText = '';
-        
-        // Convert the Buffer to a readable stream
+
+        // Convert Buffer to Readable Stream
         const stream = streamifier.createReadStream(fileContent);
-        
+
         stream
             .pipe(csvParser())
             .on('data', (row) => {
-                extractedText += JSON.stringify(row) + '\n'; // Add CSV row as text
+                console.log("CSV Row:", row);  // 🚀 Debugging step: Log each CSV row
+                extractedText += JSON.stringify(row) + '\n'; 
             })
             .on('end', () => {
-                resolve(extractedText); // Resolve the extracted text after parsing
+                console.log("Extracted CSV Text:", extractedText);  // 🚀 Log full extracted text
+                resolve(extractedText);
             })
             .on('error', (err) => {
-                reject("Error parsing CSV: " + err); // Reject if CSV parsing fails
+                reject("Error parsing CSV: " + err);
             });
     });
 };
+
 
 // Helper function to extract text from PDF files
 const extractTextFromPDF = (fileContent) => {
