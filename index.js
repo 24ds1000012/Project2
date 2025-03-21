@@ -120,15 +120,26 @@ const extractTextFromDoc = (fileContent) => {
 
 // Helper function to search for an answer in extracted text
 const searchForAnswerInText = (text, question) => {
-    const regex = new RegExp(question, 'i');
-    const matches = text.match(regex);
+    try {
+        const rows = text.split("\n").map(row => JSON.parse(row)); // Convert text back to JSON
+        console.log("Parsed CSV Rows:", rows); // 🚀 Debugging: Log parsed CSV rows
 
-    if (matches && matches.length > 0) {
-        return matches;
-    } else {
+        for (const row of rows) {
+            for (const key in row) {
+                if (key.toLowerCase().includes("question") && row[key].toLowerCase().includes(question.toLowerCase())) {
+                    console.log("Found Answer:", row["answer"]); // 🚀 Log found answer
+                    return [row["answer"] || "Answer not found in the document."];
+                }
+            }
+        }
         return ["No answer found in the document."];
+
+    } catch (error) {
+        console.error("Error searching in extracted text:", error);
+        return ["Error processing extracted text."];
     }
 };
+
 
 // Function to interact with OpenAI API (for non-ZIP questions)
 const getChatGPTAnswer = async (question) => {
