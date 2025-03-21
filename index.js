@@ -179,13 +179,34 @@ app.post("/api", multer().single("file"), async (req, res) => {
             });
         }
 
-        // Handle the file upload request (multipart/form-data) - process ZIP with any file type
-        if (file && path.extname(file.originalname) === ".zip") {
+        // Ensure a file was uploaded
+        if (!file) {
+            return res.status(400).json({ error: "No file uploaded." });
+        }
+
+        const fileExt = path.extname(file.originalname).toLowerCase();
+
+        // ✅ Handle ZIP files
+        if (fileExt === ".zip") {
             const answerValues = await extractAndFindAnswer(file.buffer, question);
             return res.json({ question, answers: answerValues });
         }
 
-        return res.status(400).json({ error: "Only .zip files are supported for this operation." });
+        // ✅ Handle PDF files
+        if (fileExt === ".pdf") {
+            const extractedText = await extractTextFromPDF(file.buffer);
+            const answer = searchForAnswerInText(extractedText, question);
+            return res.json({ question, answers: answer });
+        }
+
+        // ✅ Handle CSV files
+        if (fileExt === ".csv") {
+            const extractedText = await extractTextFromCSV(file.buffer);
+            const answer = searchForAnswerInText(extractedText, question);
+            return res.json({ question, answers: answer });
+        }
+
+        return res.status(400).json({ error: "Unsupported file format. Only ZIP, PDF, and CSV are supported." });
 
     } catch (error) {
         console.error("Error processing request:", error);
