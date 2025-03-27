@@ -1,47 +1,38 @@
 const express = require("express");
 const multer = require("multer");
-const AdmZip = require("adm-zip");
 const path = require("path");
 const { Configuration, OpenAIApi } = require("openai");
 const textract = require("textract");
 const csvParser = require("csv-parser");
 const streamifier = require("streamifier");
 const pdfParse = require("pdf-parse");
-const xlsx = require("xlsx");  // Added for Excel support
+const xlsx = require("xlsx");
+const AdmZip = require("adm-zip");
 require("dotenv").config();
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Initialize OpenAI API client
 const configuration = new Configuration({
     apiKey: process.env.OPENAI_API_KEY,
 });
 const openai = new OpenAIApi(configuration);
 
-// Extract text from CSV files
 const extractTextFromCSV = (fileContent) => {
     return new Promise((resolve, reject) => {
-        let extractedRows = [];
+        let extractedText = "";
         const stream = streamifier.createReadStream(fileContent);
-        
         stream
             .pipe(csvParser())
             .on("data", (row) => {
-                let normalizedRow = {};
-                for (const key in row) {
-                    const cleanKey = key.replace(/\uFEFF/g, ""); // Remove BOM
-                    normalizedRow[cleanKey] = row[key];
-                }
-                extractedRows.push(normalizedRow);
+                extractedText += JSON.stringify(row) + "\n"; 
             })
-            .on("end", () => resolve(JSON.stringify(extractedRows)))
+            .on("end", () => resolve(extractedText))
             .on("error", (err) => reject("Error parsing CSV: " + err));
     });
 };
 
-// Extract text from PDF files
 const extractTextFromPDF = async (fileContent) => {
     try {
         const data = await pdfParse(fileContent);
@@ -52,18 +43,14 @@ const extractTextFromPDF = async (fileContent) => {
     }
 };
 
-// Extract text from Excel files (NEW)
 const extractTextFromExcel = async (fileContent) => {
     try {
         const workbook = xlsx.read(fileContent, { type: "buffer" });
         let extractedText = "";
-
         workbook.SheetNames.forEach((sheetName) => {
             const sheet = workbook.Sheets[sheetName];
-            const sheetData = xlsx.utils.sheet_to_csv(sheet); // Convert to CSV format
-            extractedText += sheetData + "\n";
+            extractedText += xlsx.utils.sheet_to_csv(sheet) + "\n";
         });
-
         return extractedText || "No data found in the Excel file.";
     } catch (error) {
         console.error("Error extracting text from Excel:", error);
@@ -71,7 +58,6 @@ const extractTextFromExcel = async (fileContent) => {
     }
 };
 
-// Extract text from DOCX files
 const extractTextFromDoc = (fileContent) => {
     return new Promise((resolve, reject) => {
         textract.fromBufferWithMime(
@@ -82,8 +68,7 @@ const extractTextFromDoc = (fileContent) => {
     });
 };
 
-// Process ZIP files and extract answers
-const extractAndFindAnswer = async (zipBuffer, question) => {
+const extractAndProcessZip = async (zipBuffer) => {
     try {
         const zip = new AdmZip(zipBuffer);
         const zipEntries = zip.getEntries();
@@ -96,7 +81,7 @@ const extractAndFindAnswer = async (zipBuffer, question) => {
             const fileExt = path.extname(entry.entryName).toLowerCase();
 
             if (fileExt === ".txt" || fileExt === ".json") {
-                extractedText += fileContent.toString("utf8");
+                extractedText += fileContent.toString("utf8") + "\n";
             } else if (fileExt === ".csv") {
                 extractedText += await extractTextFromCSV(fileContent);
             } else if (fileExt === ".pdf") {
@@ -110,35 +95,24 @@ const extractAndFindAnswer = async (zipBuffer, question) => {
             }
         }
 
-        if (!extractedText) throw new Error("No readable text found in the ZIP file.");
-        return searchForAnswerInText(extractedText, question);
+        return extractedText || "No readable text found in the ZIP file.";
     } catch (error) {
         console.error("Error processing ZIP:", error);
-        return [`Error processing ZIP: ${error.message}`];
+        return `Error processing ZIP: ${error.message}`;
     }
 };
 
-// Search for an answer in extracted text
-const searchForAnswerInText = (text, question) => {
+const getChatGPTAnswer = async (text, question) => {
     try {
-        const rows = JSON.parse(text);
-        for (const row of rows) {
-            if ("answer" in row) return [row["answer"]];
+        const messages = [{ role: "user", content: question }];
+        if (text) {
+            messages.unshift({ role: "system", content: `Use the following data to answer questions:\n${text}` });
         }
-        return ["No answer found in the document."];
-    } catch (error) {
-        console.error("Error searching in extracted text:", error);
-        return ["Error processing extracted text."];
-    }
-};
 
-// Query OpenAI API
-const getChatGPTAnswer = async (question) => {
-    try {
         const response = await openai.createChatCompletion({
             model: "gpt-3.5-turbo",
-            messages: [{ role: "user", content: question }],
-            max_tokens: 150,
+            messages: messages,
+            max_tokens: 300,
             temperature: 0.7,
         });
 
@@ -149,51 +123,41 @@ const getChatGPTAnswer = async (question) => {
     }
 };
 
-// API endpoint for handling JSON and file uploads
 app.post("/api", multer().single("file"), async (req, res) => {
     try {
         const { question } = req.body;
         const file = req.file;
 
-        // ✅ If only a question is provided (ChatGPT answer)
-        if (question && !file) {
-            const chatGPTAnswer = await getChatGPTAnswer(question);
-            return res.json({ question, answers: [chatGPTAnswer] });
+        if (!question) {
+            return res.status(400).json({ error: "No question provided." });
         }
 
-        // ✅ If a file is uploaded, process it
-        if (!file) return res.status(400).json({ error: "No file uploaded." });
+        let extractedText = "";
 
-        const fileExt = path.extname(file.originalname).toLowerCase();
+        if (file) {
+            const fileExt = path.extname(file.originalname).toLowerCase();
 
-        // ✅ Handle ZIP files
-        if (fileExt === ".zip") {
-            const answerValues = await extractAndFindAnswer(file.buffer, question);
-            return res.json({ question, answers: answerValues });
+            if (fileExt === ".zip") {
+                extractedText = await extractAndProcessZip(file.buffer);
+            } else if (fileExt === ".pdf") {
+                extractedText = await extractTextFromPDF(file.buffer);
+            } else if (fileExt === ".csv") {
+                extractedText = await extractTextFromCSV(file.buffer);
+            } else if (fileExt === ".xlsx" || fileExt === ".xls") {
+                extractedText = await extractTextFromExcel(file.buffer);
+            } else if (fileExt === ".docx" || fileExt === ".doc") {
+                extractedText = await extractTextFromDoc(file.buffer);
+            } else {
+                return res.status(400).json({ error: "Unsupported file format." });
+            }
+
+            if (!extractedText.trim()) {
+                return res.json({ question, answers: ["No readable text found in the file."] });
+            }
         }
 
-        // ✅ Handle PDF files
-        if (fileExt === ".pdf") {
-            const extractedText = await extractTextFromPDF(file.buffer);
-            const answer = searchForAnswerInText(extractedText, question);
-            return res.json({ question, answers: answer });
-        }
-
-        // ✅ Handle CSV files
-        if (fileExt === ".csv") {
-            const extractedText = await extractTextFromCSV(file.buffer);
-            const answer = searchForAnswerInText(extractedText, question);
-            return res.json({ question, answers: answer });
-        }
-
-        // ✅ Handle Excel files (NEW)
-        if (fileExt === ".xlsx" || fileExt === ".xls") {
-            const extractedText = await extractTextFromExcel(file.buffer);
-            const answer = searchForAnswerInText(extractedText, question);
-            return res.json({ question, answers: answer });
-        }
-
-        return res.status(400).json({ error: "Unsupported file format. Only ZIP, PDF, CSV, XLS, and XLSX are supported." });
+        const chatGPTAnswer = await getChatGPTAnswer(extractedText, question);
+        return res.json({ question, answers: [chatGPTAnswer] });
 
     } catch (error) {
         console.error("Error processing request:", error);
@@ -201,10 +165,8 @@ app.post("/api", multer().single("file"), async (req, res) => {
     }
 });
 
-// Root route
 app.get("/", (req, res) => {
     res.send("Welcome to the Assignment Answer API! Use the /api endpoint.");
 });
 
-// Export for Vercel
 module.exports = app;
