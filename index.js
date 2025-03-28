@@ -165,8 +165,25 @@ app.post("/api", multer().single("file"), async (req, res) => {
     }
 });
 
+app.post("/ask", async (req, res) => {
+    try {
+        const { question } = req.body;
+
+        if (!question) {
+            return res.status(400).json({ error: "No question provided." });
+        }
+
+        const chatGPTAnswer = await getChatGPTAnswer("", question);
+        return res.json({ question, answers: [chatGPTAnswer] });
+
+    } catch (error) {
+        console.error("Error processing request:", error);
+        res.status(500).json({ error: "An unexpected error occurred." });
+    }
+});
+
 app.get("/", (req, res) => {
-    res.send("Welcome to the Assignment Answer API! Use the /api endpoint.");
+    res.send("Welcome to the AI Question Answering API! Use the /api endpoint to ask with files or /ask for general questions.");
 });
 
 module.exports = app;
