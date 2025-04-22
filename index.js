@@ -103,7 +103,6 @@ const extractAndProcessZip = async (zipBuffer) => {
     }
 };
 
-console.log("Final extracted text:", extractedText.slice(0, 1000));
 const getChatGPTAnswer = async (text, question) => {
     try {
         const messages = [{ role: "user", content: question }];
