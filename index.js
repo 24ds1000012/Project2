@@ -26,6 +26,7 @@ const extractTextFromCSV = (fileContent) => {
         stream
             .pipe(csvParser())
             .on("data", (row) => {
+                console.log("Row:", row); 
                 extractedText += JSON.stringify(row) + "\n"; 
             })
             .on("end", () => resolve(extractedText))
